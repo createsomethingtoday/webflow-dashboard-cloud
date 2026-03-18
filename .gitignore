@@ -1,0 +1,13 @@
+node_modules
+node_modules*
+.next
+.open-next
+.wrangler
+.npm-cache
+.npm-home
+.DS_Store
+dist
+coverage
+*.tsbuildinfo
+.env.local
+.env
