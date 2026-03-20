@@ -1,8 +1,8 @@
-import { isTrustedRequestOrigin } from '@create-something/webflow-dashboard-core';
+import { isTrustedRequestOrigin } from '@create-something/webflow-dashboard-core/security';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PROTECTED_PAGE_PREFIXES = ['/dashboard', '/assets', '/marketplace'] as const;
-const PROTECTED_API_PREFIXES = ['/api/profile', '/api/keys', '/api/assets', '/api/analytics'] as const;
+const PROTECTED_PAGE_PREFIXES = ['/dashboard', '/assets', '/marketplace', '/validation'] as const;
+const PROTECTED_API_PREFIXES = ['/api/profile', '/api/keys', '/api/assets', '/api/analytics', '/api/validation', '/api/feedback'] as const;
 
 const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

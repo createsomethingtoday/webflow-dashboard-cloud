@@ -26,6 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <a className="nav-link" href={withBasePath('/marketplace')}>
                   Marketplace
                 </a>
+                <a className="nav-link" href={withBasePath('/validation')}>
+                  Validation
+                </a>
                 <a className="nav-link" href={withBasePath('/login')}>
                   Login
                 </a>

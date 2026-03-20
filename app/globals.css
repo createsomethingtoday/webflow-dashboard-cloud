@@ -294,6 +294,10 @@ img {
   flex-wrap: wrap;
 }
 
+.turnstile-wrap {
+  min-height: 4.25rem;
+}
+
 .notice {
   padding: 0.9rem 1rem;
   border-radius: var(--radius-lg);

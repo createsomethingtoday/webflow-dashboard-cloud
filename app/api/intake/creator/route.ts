@@ -1,8 +1,9 @@
-import { validateEmail } from '@create-something/webflow-dashboard-core';
+import { validateEmail } from '@create-something/webflow-dashboard-core/airtable';
 import { jsonNoStore } from '../../../../lib/server/responses';
 import { getServerAirtable } from '../../../../lib/server/airtable';
 import { isSupportedCountry } from '../../../../lib/intake/constants';
 import { checkRemoteCreatorEmailAvailability } from '../../../../lib/intake/external';
+import { verifyTurnstileToken } from '../../../../lib/server/turnstile';
 
 type CreatorSubmissionBody = {
   country?: string;
@@ -14,6 +15,7 @@ type CreatorSubmissionBody = {
   biography?: string;
   avatarUrl?: string;
   agreedToTerms?: boolean;
+  turnstileToken?: string;
 };
 
 function isValidOptionalUrl(value: string | undefined): boolean {
@@ -29,6 +31,17 @@ function isValidOptionalUrl(value: string | undefined): boolean {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as CreatorSubmissionBody;
+    const turnstile = await verifyTurnstileToken(request, body.turnstileToken, 'creator-submit');
+    if (!turnstile.valid) {
+      return jsonNoStore(
+        {
+          error: turnstile.error || 'Bot verification failed.',
+          errorCodes: turnstile.errorCodes
+        },
+        { status: 400 }
+      );
+    }
+
     const primaryEmail = validateEmail(body.primaryEmail || '');
     const webflowEmail = validateEmail(body.webflowEmail || '');
     const legalName = String(body.legalName || '').trim();

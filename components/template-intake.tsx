@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import Script from 'next/script';
+import { useEffect, useRef, useState } from 'react';
 import { appPath } from '../lib/runtime-paths';
 import {
   ALL_COUNTRIES,
@@ -16,6 +17,23 @@ type Tone = 'success' | 'error' | 'info';
 type StatusMessage = {
   tone: Tone;
   message: string;
+};
+
+type TurnstileStep = 'creator' | 'template';
+
+type TurnstileRenderOptions = {
+  sitekey: string;
+  action: string;
+  theme?: 'light' | 'dark' | 'auto';
+  callback?: (token: string) => void;
+  'expired-callback'?: () => void;
+  'error-callback'?: () => void;
+};
+
+type TurnstileApi = {
+  render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
+  reset: (widgetId?: string) => void;
+  remove: (widgetId?: string) => void;
 };
 
 type CreatorFormState = {
@@ -61,6 +79,12 @@ type VerificationState = {
   publishedUrlMessage: string;
   gsapDetected: boolean;
 };
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
 
 const initialCreatorState: CreatorFormState = {
   country: '',
@@ -134,7 +158,10 @@ function statusClassName(tone: Tone) {
   return 'notice';
 }
 
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
+
 export function TemplateIntake() {
+  const turnstileEnabled = Boolean(TURNSTILE_SITE_KEY);
   const [step, setStep] = useState<'creator' | 'template'>('creator');
   const [creator, setCreator] = useState<CreatorFormState>(initialCreatorState);
   const [template, setTemplate] = useState<TemplateFormState>(initialTemplateState);
@@ -152,6 +179,15 @@ export function TemplateIntake() {
   const [creatorSubmitting, setCreatorSubmitting] = useState(false);
   const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [utm, setUtm] = useState<Record<string, string>>({});
+  const [turnstileReady, setTurnstileReady] = useState(!turnstileEnabled);
+  const [turnstileTokens, setTurnstileTokens] = useState<Record<TurnstileStep, string>>({
+    creator: '',
+    template: ''
+  });
+  const creatorTurnstileRef = useRef<HTMLDivElement | null>(null);
+  const templateTurnstileRef = useRef<HTMLDivElement | null>(null);
+  const creatorTurnstileWidgetId = useRef<string | null>(null);
+  const templateTurnstileWidgetId = useRef<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -172,10 +208,118 @@ export function TemplateIntake() {
     setUtm(captured);
   }, []);
 
+  function setTurnstileToken(stepName: TurnstileStep, token: string) {
+    setTurnstileTokens((current) => ({
+      ...current,
+      [stepName]: token
+    }));
+  }
+
+  function clearTurnstileToken(stepName: TurnstileStep) {
+    setTurnstileToken(stepName, '');
+  }
+
+  function getTurnstileWidgetId(stepName: TurnstileStep) {
+    return stepName === 'creator'
+      ? creatorTurnstileWidgetId.current
+      : templateTurnstileWidgetId.current;
+  }
+
+  function setTurnstileWidgetId(stepName: TurnstileStep, widgetId: string | null) {
+    if (stepName === 'creator') {
+      creatorTurnstileWidgetId.current = widgetId;
+    } else {
+      templateTurnstileWidgetId.current = widgetId;
+    }
+  }
+
+  function getTurnstileContainer(stepName: TurnstileStep) {
+    return stepName === 'creator' ? creatorTurnstileRef.current : templateTurnstileRef.current;
+  }
+
+  function resetTurnstile(stepName: TurnstileStep) {
+    if (!turnstileEnabled || typeof window === 'undefined' || !window.turnstile) {
+      return;
+    }
+
+    const widgetId = getTurnstileWidgetId(stepName);
+    if (!widgetId) {
+      return;
+    }
+
+    window.turnstile.reset(widgetId);
+    clearTurnstileToken(stepName);
+  }
+
+  function removeTurnstile(stepName: TurnstileStep) {
+    if (!turnstileEnabled || typeof window === 'undefined' || !window.turnstile) {
+      return;
+    }
+
+    const widgetId = getTurnstileWidgetId(stepName);
+    if (widgetId) {
+      window.turnstile.remove(widgetId);
+      setTurnstileWidgetId(stepName, null);
+    }
+
+    clearTurnstileToken(stepName);
+  }
+
+  function ensureTurnstile(stepName: TurnstileStep) {
+    if (!turnstileEnabled || !turnstileReady || typeof window === 'undefined' || !window.turnstile) {
+      return;
+    }
+
+    const container = getTurnstileContainer(stepName);
+    if (!container || getTurnstileWidgetId(stepName)) {
+      return;
+    }
+
+    const action = stepName === 'creator' ? 'creator-submit' : 'template-submit';
+    const widgetId = window.turnstile.render(container, {
+      sitekey: TURNSTILE_SITE_KEY,
+      action,
+      theme: 'light',
+      callback: (token) => setTurnstileToken(stepName, token),
+      'expired-callback': () => clearTurnstileToken(stepName),
+      'error-callback': () => clearTurnstileToken(stepName)
+    });
+
+    setTurnstileWidgetId(stepName, widgetId);
+  }
+
+  useEffect(() => {
+    if (!turnstileEnabled || !turnstileReady) {
+      return;
+    }
+
+    const activeStep: TurnstileStep = step;
+    const inactiveStep: TurnstileStep = step === 'creator' ? 'template' : 'creator';
+
+    removeTurnstile(inactiveStep);
+    ensureTurnstile(activeStep);
+  }, [step, turnstileEnabled, turnstileReady]);
+
+  useEffect(() => {
+    return () => {
+      if (!turnstileEnabled || typeof window === 'undefined' || !window.turnstile) {
+        return;
+      }
+
+      if (creatorTurnstileWidgetId.current) {
+        window.turnstile.remove(creatorTurnstileWidgetId.current);
+      }
+
+      if (templateTurnstileWidgetId.current) {
+        window.turnstile.remove(templateTurnstileWidgetId.current);
+      }
+    };
+  }, [turnstileEnabled]);
+
   const creatorCountrySupported = creator.country ? isSupportedCountry(creator.country) : true;
   const previewUrlValid =
     template.previewUrl.trim() === '' ||
-    template.previewUrl.trim().startsWith('https://preview.webflow.com/preview/');
+    template.previewUrl.trim().includes('https://preview.webflow.com/preview/');
 
   function updateCreator<K extends keyof CreatorFormState>(key: K, value: CreatorFormState[K]) {
     setCreator((current) => ({ ...current, [key]: value }));
@@ -415,6 +559,7 @@ export function TemplateIntake() {
     event.preventDefault();
     setCreatorSubmitting(true);
     setCreatorStatus(null);
+    let shouldResetTurnstile = false;
 
     try {
       if (verification.primaryEmailVerified !== creator.primaryEmail.trim().toLowerCase()) {
@@ -429,11 +574,16 @@ export function TemplateIntake() {
         throw new Error('Upload the creator profile image before submitting.');
       }
 
+      if (turnstileEnabled && !turnstileTokens.creator) {
+        throw new Error('Complete the bot check before creating the creator profile.');
+      }
+
       const avatarUrl = await uploadIntakeFile(
         creator.avatarFile,
         'avatar',
         creator.primaryEmail.trim()
       );
+      shouldResetTurnstile = turnstileEnabled;
 
       const response = await fetch(appPath('/api/intake/creator'), {
         method: 'POST',
@@ -448,6 +598,7 @@ export function TemplateIntake() {
           biography: creator.biography,
           avatarUrl,
           agreedToTerms: creator.agreedToTerms,
+          turnstileToken: turnstileTokens.creator,
           utm
         })
       });
@@ -480,6 +631,9 @@ export function TemplateIntake() {
         message: error instanceof Error ? error.message : 'Failed to create creator profile.'
       });
     } finally {
+      if (shouldResetTurnstile) {
+        resetTurnstile('creator');
+      }
       setCreatorSubmitting(false);
     }
   }
@@ -488,6 +642,7 @@ export function TemplateIntake() {
     event.preventDefault();
     setTemplateSubmitting(true);
     setTemplateStatus(null);
+    let shouldResetTurnstile = false;
 
     try {
       if (
@@ -513,7 +668,11 @@ export function TemplateIntake() {
       }
 
       if (!previewUrlValid) {
-        throw new Error('Preview URL must start with https://preview.webflow.com/preview/.');
+        throw new Error('Preview URL must contain https://preview.webflow.com/preview/.');
+      }
+
+      if (turnstileEnabled && !turnstileTokens.template) {
+        throw new Error('Complete the bot check before submitting the template.');
       }
 
       const creatorEmail = template.creatorEmail.trim();
@@ -526,6 +685,7 @@ export function TemplateIntake() {
           template.galleryFiles.map((file) => uploadIntakeFile(file, 'gallery', creatorEmail))
         )
       ]);
+      shouldResetTurnstile = turnstileEnabled;
 
       const response = await fetch(appPath('/api/intake/template'), {
         method: 'POST',
@@ -550,6 +710,7 @@ export function TemplateIntake() {
           galleryUrls,
           checklistConfirmed: template.checklistConfirmed,
           agreementConfirmed: template.agreementConfirmed,
+          turnstileToken: turnstileTokens.template,
           utm
         })
       });
@@ -591,6 +752,9 @@ export function TemplateIntake() {
         message: error instanceof Error ? error.message : 'Failed to submit template.'
       });
     } finally {
+      if (shouldResetTurnstile) {
+        resetTurnstile('template');
+      }
       setTemplateSubmitting(false);
     }
   }
@@ -601,6 +765,13 @@ export function TemplateIntake() {
 
   return (
     <main className="container">
+      {turnstileEnabled ? (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+          strategy="afterInteractive"
+          onLoad={() => setTurnstileReady(true)}
+        />
+      ) : null}
       <div className="page-stack">
         <section className="page-header">
           <div>
@@ -818,6 +989,16 @@ export function TemplateIntake() {
                 <span>I agree to the creator terms and marketplace policies.</span>
               </label>
 
+              {turnstileEnabled ? (
+                <div className="field">
+                  <span className="field-label">Bot check</span>
+                  <div className="turnstile-wrap" ref={creatorTurnstileRef} />
+                  <div className="field-help">
+                    Required before creating the creator profile.
+                  </div>
+                </div>
+              ) : null}
+
               {creatorStatus ? (
                 <div className={statusClassName(creatorStatus.tone)}>{creatorStatus.message}</div>
               ) : null}
@@ -964,7 +1145,7 @@ export function TemplateIntake() {
                   />
                   {!previewUrlValid ? (
                     <div className="field-help" style={{ color: 'var(--color-error)' }}>
-                      Preview URLs must start with https://preview.webflow.com/preview/.
+                      Preview URLs must contain https://preview.webflow.com/preview/.
                     </div>
                   ) : null}
                 </div>
@@ -1203,6 +1384,14 @@ export function TemplateIntake() {
                 />
                 <span>I agree to the marketplace submission agreement.</span>
               </label>
+
+              {turnstileEnabled ? (
+                <div className="field">
+                  <span className="field-label">Bot check</span>
+                  <div className="turnstile-wrap" ref={templateTurnstileRef} />
+                  <div className="field-help">Required before submitting the template.</div>
+                </div>
+              ) : null}
 
               {templateStatus ? (
                 <div className={statusClassName(templateStatus.tone)}>{templateStatus.message}</div>

@@ -1,9 +1,11 @@
-import { validateEmail } from '@create-something/webflow-dashboard-core';
+import { validateEmail } from '@create-something/webflow-dashboard-core/airtable';
 import { jsonNoStore } from '../../../../lib/server/responses';
 import { getServerAirtable } from '../../../../lib/server/airtable';
 import { evaluateCreatorEligibility } from '../../../../lib/intake/creator-eligibility';
+import { checkRemoteTemplateNameAvailability } from '../../../../lib/intake/external';
 import { runPublishedUrlValidation } from '../../../../lib/intake/published-url';
 import { validateTemplateNameSyntax } from '../../../../lib/intake/template-name';
+import { verifyTurnstileToken } from '../../../../lib/server/turnstile';
 
 type TemplateSubmissionBody = {
   creatorName?: string;
@@ -25,6 +27,7 @@ type TemplateSubmissionBody = {
   galleryUrls?: string[];
   checklistConfirmed?: boolean;
   agreementConfirmed?: boolean;
+  turnstileToken?: string;
   utm?: Record<string, string>;
 };
 
@@ -48,8 +51,8 @@ function toParagraphs(value: string): string {
 
 function normalizePreviewUrl(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed.startsWith('https://preview.webflow.com/preview/')) {
-    throw new Error('Preview URL must start with https://preview.webflow.com/preview/.');
+  if (!trimmed.includes('https://preview.webflow.com/preview/')) {
+    throw new Error('Preview URL must contain https://preview.webflow.com/preview/.');
   }
 
   try {
@@ -68,6 +71,17 @@ function ensureArray(value: unknown): string[] {
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as TemplateSubmissionBody;
+    const turnstile = await verifyTurnstileToken(request, body.turnstileToken, 'template-submit');
+    if (!turnstile.valid) {
+      return jsonNoStore(
+        {
+          error: turnstile.error || 'Bot verification failed.',
+          errorCodes: turnstile.errorCodes
+        },
+        { status: 400 }
+      );
+    }
+
     const creatorEmail = validateEmail(body.creatorEmail || '');
     const creatorName = String(body.creatorName || '').trim();
     const templateName = String(body.templateName || '').trim();
@@ -154,8 +168,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const nameUniqueness = await airtable.checkAssetNameUniqueness(templateName);
-    if (!nameUniqueness.unique) {
+    const [nameUniqueness, remoteNameAvailability] = await Promise.all([
+      airtable.checkAssetNameUniqueness(templateName),
+      checkRemoteTemplateNameAvailability(templateName).catch(() => null)
+    ]);
+
+    if (!nameUniqueness.unique || remoteNameAvailability?.taken) {
       return jsonNoStore({ error: 'Template name is already in use.' }, { status: 409 });
     }
 

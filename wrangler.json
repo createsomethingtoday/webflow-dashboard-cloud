@@ -1,8 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "webflow-dashboard-cloud",
+  "main": ".open-next/worker.js",
   "compatibility_date": "2026-03-18",
   "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
   "d1_databases": [
     {
       "binding": "DB",

@@ -1,6 +1,6 @@
 # Webflow Dashboard Cloud Parity Matrix
 
-Source of truth: the original `packages/webflow-dashboard` code inventory as of 2026-03-18.
+Source of truth: `packages/webflow-dashboard` code inventory as of 2026-03-18.
 
 ## MVP
 
@@ -47,22 +47,22 @@ Source of truth: the original `packages/webflow-dashboard` code inventory as of 
   - `/api/cron/cleanup`
   - `/api/submission-status`
 
-## Phase 2
+## Phase 2 (complete)
 
 - Validation flows
-  - `/validation`
-  - `/validation/playground`
-  - `/api/validation/gsap`
-  - `GsapValidationModal`
-  - `WebflowWayCard`
-- Analytics support APIs not needed for MVP UI
-  - `/api/analytics/history`
-  - `/api/analytics/requests`
-  - `/api/analytics/track`
+  - `/validation` ✅
+  - `/validation/playground` ✅
+  - `/api/validation/gsap` ✅
+  - `GsapValidationModal` → Quick validate modal in `validation-tools.tsx` ✅
+  - `WebflowWayCard` → Webflow Way section in `validation-tools.tsx` ✅
+- Analytics support APIs
+  - `/api/analytics/history` ✅
+  - `/api/analytics/requests` ✅
+  - `/api/analytics/track` ✅
 - Feedback flow
-  - `/api/feedback`
+  - `/api/feedback` ✅
 - Snapshot maintenance
-  - `/api/cron/snapshot`
+  - `/api/cron/snapshot` ✅
 
 ## Deferred
 
