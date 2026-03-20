@@ -1389,6 +1389,17 @@ export function getAirtableClient(env: AirtableEnvLike | undefined) {
       };
     },
 
+    async getAllAssetsForSnapshot(): Promise<Asset[]> {
+      const records = await base(TABLES.ASSETS)
+        .select({
+          view: VIEWS.ASSETS,
+          filterByFormula: `{🆎Type} = 'Template🏗️'`
+        })
+        .all();
+
+      return records.map(mapAssetRecord);
+    },
+
     async getCreatorCategorySplit(): Promise<{
       assetsProcessed: number;
       assetsWithoutCreator: number;
