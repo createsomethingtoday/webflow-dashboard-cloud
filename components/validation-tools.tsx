@@ -34,7 +34,7 @@ export function ValidationToolsPage({ userEmail }: { userEmail: string }) {
         body: JSON.stringify({ url: gsapUrl.trim() })
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as { error?: string; passed: boolean; summary: { passRate: number; totalPages: number; passedPages: number; failedPages: number } };
       if (!response.ok) {
         throw new Error(data.error || 'Validation failed');
       }
