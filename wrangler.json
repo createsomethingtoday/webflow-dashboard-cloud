@@ -24,7 +24,7 @@
   "r2_buckets": [
     {
       "binding": "UPLOADS",
-      "bucket_name": "webflow-dashboard-cloud-uploads"
+      "bucket_name": "wf-dash-cloud-uploads"
     }
   ],
   "vars": {
